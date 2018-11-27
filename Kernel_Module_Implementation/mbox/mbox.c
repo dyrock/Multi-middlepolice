@@ -176,32 +176,31 @@ void computeSLR(struct cTable *p, unsigned int id, unsigned int saddr, unsigned 
     // Continue to load cTable
     if(p->n < cTable_num){
 
-	// refresh stop time until cTable is Full
-	if (cTableContainCapability(p, id, saddr, time, code)) {
-	    (p->m)++;
-	    if(jiffies > p->stop){
-		p->stop = jiffies + 250;
-	    }
-            //printk(KERN_INFO "NOT FILL UP cTable: Ctab check id %u capabilities <Total checked %u>\n", id, p->m);
-	}
-
+		// refresh stop time until cTable is Full
+		if (cTableContainCapability(p, id, saddr, time, code)) {
+			(p->m)++;
+			if(jiffies > p->stop){
+				p->stop = jiffies + 250;
+			}
+				//printk(KERN_INFO "NOT FILL UP cTable: Ctab check id %u capabilities <Total checked %u>\n", id, p->m);
+		}
     } else if(jiffies <= p->stop) {
-	if (cTableContainCapability(p, id, saddr, time, code)){
-	    (p->m)++;
-	    //printk(KERN_INFO "Ctab check id %u capabilities <Total checked %u>\n", id, p->m);
-	}
+		if (cTableContainCapability(p, id, saddr, time, code)){
+			(p->m)++;
+			//printk(KERN_INFO "Ctab check id %u capabilities <Total checked %u>\n", id, p->m);
+		}
     } else {
-	// compute SLR
-        if(load_cTable != 0 && p->n == cTable_num){
-	    printk(KERN_INFO "cTable###send %u capabilities receive %u capabilities at this interval.\n", p->n, p->m);
-	    if (p->n > p->m) SLR_loss_rate = 100 * (p->n - p->m) / p->n;
-	    else SLR_loss_rate = 0;
+		// compute SLR
+			if(load_cTable != 0 && p->n == cTable_num){
+			printk(KERN_INFO "cTable###send %u capabilities receive %u capabilities at this interval.\n", p->n, p->m);
+			if (p->n > p->m) SLR_loss_rate = 100 * (p->n - p->m) / p->n;
+			else SLR_loss_rate = 0;
 
-	    printk(KERN_INFO "SLR %u \n", SLR_loss_rate);
+			printk(KERN_INFO "SLR %u \n", SLR_loss_rate);
 
-	    // clear cTable
-      	    load_cTable = 0;
-	}
+			// clear cTable
+				load_cTable = 0;
+		}
     }
 }
 
@@ -1041,14 +1040,8 @@ unsigned int hook_func_in(unsigned int hooknum, struct sk_buff *skb, const struc
     
     iph = ip_hdr(skb);
 
-    if(mbox_networkip == 0) {
-	mbox_networkip = ip_str_to_num(mbox_ip);
-    }
-
-    if(victim_networkip == 0){
-	victim_networkip = ip_str_to_num(victim_ip);
-    }
-
+    if(mbox_networkip == 0) mbox_networkip = ip_str_to_num(mbox_ip);
+    if(victim_networkip == 0) victim_networkip = ip_str_to_num(victim_ip);
 
     /*
      * Handling traffic received from the victim:
@@ -1057,58 +1050,57 @@ unsigned int hook_func_in(unsigned int hooknum, struct sk_buff *skb, const struc
      */
     if(Add_Trim_Capability && iph->saddr == victim_networkip && iph->protocol == IPPROTO_TCP)
     {
-	tcph = (struct tcphdr *)((__u32 *)iph+ iph->ihl);		
-	tcplen = skb->len - ip_hdrlen(skb);
-
-	if (ntohs(tcph->source) == 9877 && tcph->ack && (tcph->res1 != 0))
-	{
-	    spin_lock_irq(&mylock);	
-	    temp = searchiTable(iph->daddr);
-
-	    if((temp != NULL) && jiffies <= (temp->TA + detection_period) && temp->i <= Th_cap){
-		res1 = tcph->res1;
-
-		/*
-		 * The number of capability feedback in the ACK packet is determined by the TCP option res1
-		 */
-		while(res1 >= 1){
-		    
-		    // Inspect capability feedback 
-		    memcpy(getCapability, (skb->data + skb->len - res1*capability_len), capability_len);
-		    cap = (struct capability *)getCapability;
-		    printk(KERN_INFO "get capability skb->len:%u skb->data_len:%u id=%u saddr=%u timestamp=%lu code=%s <res1:%u>\n",skb->len, skb->data_len, cap->id, cap->saddr, cap->timestamp, cap->code, res1);
-
-		    /*
-		     * For experimental purpose, simulate the capability verification
-		     */
-		    test_decrypt_cbc();
-
-		    //cTable Updates
-		    computeSLR(ctab, cap->id, cap->saddr, cap->timestamp, cap->code);								  
-		    /*
-		     * iTable updates: 
-		     *	    For simplicity, we simply increase the received capability in the iTable entry
-		     *	    To avoid reply attacks, WR needs to be used as proposed in the paper
-		     */
-                    res1--;
-		    (temp->i)++;
-		}
-
-		// Trim the capability feedback to reveal the original payload
-		skb_trim(skb, skb->len - tcph->res1 * capability_len);
-
-		// Recompute checksum to ensure correctiveness
-		iph->tot_len = iph->tot_len - htons(tcph->res1 * capability_len);
+		tcph = (struct tcphdr *)((__u32 *)iph+ iph->ihl);		
 		tcplen = skb->len - ip_hdrlen(skb);
-		tcph->check = 0; 
-		tcph->check = tcp_v4_check(tcplen, iph->saddr, iph->daddr, csum_partial(tcph, tcplen, 0));
-		skb->ip_summed = CHECKSUM_NONE;
-		ip_send_check(iph);
 
-	    }
-	    spin_unlock_irq(&mylock);
+		if (ntohs(tcph->source) == 9877 && tcph->ack && (tcph->res1 != 0))
+		{
+			spin_lock_irq(&mylock);	
+			temp = searchiTable(iph->daddr);
 
-	}
+			if((temp != NULL) && jiffies <= (temp->TA + detection_period) && temp->i <= Th_cap){
+				res1 = tcph->res1;
+
+				/*
+				* The number of capability feedback in the ACK packet is determined by the TCP option res1
+				*/
+				while(res1 >= 1){
+					
+					// Inspect capability feedback 
+					memcpy(getCapability, (skb->data + skb->len - res1*capability_len), capability_len);
+					cap = (struct capability *)getCapability;
+					printk(KERN_INFO "get capability skb->len:%u skb->data_len:%u id=%u saddr=%u timestamp=%lu code=%s <res1:%u>\n",skb->len, skb->data_len, cap->id, cap->saddr, cap->timestamp, cap->code, res1);
+
+					/*
+					* For experimental purpose, simulate the capability verification
+					*/
+					test_decrypt_cbc();
+
+					//cTable Updates
+					computeSLR(ctab, cap->id, cap->saddr, cap->timestamp, cap->code);								  
+					/*
+					* iTable updates: 
+					*	    For simplicity, we simply increase the received capability in the iTable entry
+					*	    To avoid reply attacks, WR needs to be used as proposed in the paper
+					*/
+					res1--;
+					(temp->i)++;
+				}
+
+				// Trim the capability feedback to reveal the original payload
+				skb_trim(skb, skb->len - tcph->res1 * capability_len);
+
+				// Recompute checksum to ensure correctiveness
+				iph->tot_len = iph->tot_len - htons(tcph->res1 * capability_len);
+				tcplen = skb->len - ip_hdrlen(skb);
+				tcph->check = 0; 
+				tcph->check = tcp_v4_check(tcplen, iph->saddr, iph->daddr, csum_partial(tcph, tcplen, 0));
+				skb->ip_summed = CHECKSUM_NONE;
+				ip_send_check(iph);
+
+			}
+			spin_unlock_irq(&mylock);
+		}
     }
 
     /*
@@ -1117,20 +1109,20 @@ unsigned int hook_func_in(unsigned int hooknum, struct sk_buff *skb, const struc
      *	2. The capability related handling is loaded to the POST_ROUTING hook
      */
     else if (redirect_enabled && iph->daddr == mbox_networkip && iph->protocol == IPPROTO_TCP) {
-	tcph = (struct tcphdr *)((__u32 *)iph+ iph->ihl);
-	tcplen = skb->len - ip_hdrlen(skb);
-	if(ntohs(tcph->dest) == 9877){
-        spin_lock_irq(&mylock);
-	// redirect the traffic to the victim
-	iph->daddr = victim_networkip; 
+		tcph = (struct tcphdr *)((__u32 *)iph+ iph->ihl);
+		tcplen = skb->len - ip_hdrlen(skb);
+		if(ntohs(tcph->dest) == 9877){
+			spin_lock_irq(&mylock);
+			// redirect the traffic to the victim
+			iph->daddr = victim_networkip; 
 
-	// recompute the checksum
-	tcph->check = 0; 
-	tcph->check = tcp_v4_check(tcplen, iph->saddr, iph->daddr, csum_partial(tcph, tcplen, 0));
-	skb->ip_summed = CHECKSUM_NONE;
-	ip_send_check(iph);
-        spin_unlock_irq(&mylock);
-    	}
+			// recompute the checksum
+			tcph->check = 0; 
+			tcph->check = tcp_v4_check(tcplen, iph->saddr, iph->daddr, csum_partial(tcph, tcplen, 0));
+			skb->ip_summed = CHECKSUM_NONE;
+			ip_send_check(iph);
+			spin_unlock_irq(&mylock);
+		}
     }
 
     return NF_ACCEPT;                                                              
@@ -1174,7 +1166,6 @@ unsigned int perSenderFairShare(void) {
  */
 unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, const struct net_device *in, const struct net_device *out, int (*okfn)(struct sk_buff *))
 {
-
     struct iphdr *iph = NULL;
     struct tcphdr *tcph = NULL;
     struct udphdr *udph = NULL;
@@ -1198,277 +1189,268 @@ unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, const stru
 
     iph = ip_hdr(skb);
 
-    if(mbox_networkip == 0) {
-	mbox_networkip = ip_str_to_num(mbox_ip);
-    }
-
-    if(victim_networkip == 0){
-	victim_networkip = ip_str_to_num(victim_ip);
-    }
+    if(mbox_networkip == 0) mbox_networkip = ip_str_to_num(mbox_ip);
+    if(victim_networkip == 0) victim_networkip = ip_str_to_num(victim_ip);
 
 
     /* 
      * Handling all packets targetting the victim (from sources)
      */ 
-    if (Add_Trim_Capability && iph->daddr == victim_networkip) {
-	/* 
-	 * Interpret the packet 
-	 */
-	if (iph->protocol == IPPROTO_TCP) {
-	    tcph = (struct tcphdr *)((__u32 *)iph+ iph->ihl);
-	    tcplen = skb->len - ip_hdrlen(skb);
-
-	    // irrelevent packets
-	    if (ntohs(tcph->dest) != 9877 || tcph->fin) return NF_ACCEPT;
-
-
-	    // Handle inner TCP packets
-	    spin_lock_irq(&mylock);
-
-	    if(load_cTable == 0){
-		initialcTable(ctab);
-		load_cTable = 1;
-	    }
-
-	    temp = searchiTable(iph->saddr);
-
-	    if (temp == NULL){
-		if ((temp = kmalloc(sizeof(struct iTable), GFP_KERNEL)) != NULL){
-		    printk(KERN_INFO "kmalloc and create one new iTable for one new client\n");
-		    temp->f = iph->saddr;
-		    temp->TA = jiffies;
-		    temp->PID = 0;
-		    temp->NR = 0;
-		    temp->ND = 0;
-		    temp->WR = 0;				
-		    memset(temp->WV, 0, 128);
-		    temp->LR = 0;				
-		    temp->next = NULL;
-		}else{
-		    printk(KERN_INFO "create new iTable fail\n");		
-		    return NF_ACCEPT;
-		}
-
-		if (iTable_header == NULL){
-		    iTable_header = temp;
-		    iTable_tail = temp;
-
-		}else{
-
-		    iTable_tail->next = temp;
-		    iTable_tail = temp;
-		}
-
-	    }
-
-	    // reset the flow entry if the flow entry is outdated
-	    if ((jiffies - temp->TA) > 10 * detection_period) {
-		printk (KERN_INFO "RETSET for the sender\n");
-
-		temp->TA = jiffies;
-		temp->PID = 0;
-		temp->NR = 0;
-		temp->ND = 0;
-		temp->WR = 0;				
-		memset(temp->WV, 0, 128);
-		temp->i = 0;
-		temp->LR = 0;				
-	    }
-
-	    // Count the corrent packet
-	    (temp->NR)++;
-
-	    /*
-	     * Best effort handling
-	     */
-	    if (temp->NR > temp->WR) {
-		if ((temp->LR > LLR_thres) || (SLR_loss_rate > SLR_thres)) {
-		    printk(KERN_INFO "Best effort rate limiting\n");
-		    printk(KERN_INFO "SLR loss rate %u\n", SLR_loss_rate);
-		    temp->ND += 1;
-		    return NF_DROP;
-		}
-	    }
-    
-	    /*
-	     * New detection period: Compute iTable entries
-	     */
-	    if ((jiffies - temp->TA) > detection_period) { 
-		printk (KERN_INFO "New period for sender %u\n", temp->f);
-		printk(KERN_INFO "PID %u\n", temp->PID);
-		printk(KERN_INFO "received capability %u\n", temp->i);
-		printk(KERN_INFO "early drop %u\n", temp->ND);
-		printk(KERN_INFO "receive window %u\n", temp->NR);
-		printk(KERN_INFO "allowed window %u\n", temp->WR);
-		printk(KERN_INFO "loss rate %u\n", temp->LR);
-	     
-		// update iTable items
-		/*
-		 * For experimental purpose, the prototype simply computes the net_loss as the 
-		 * number of lost capabilities
-		 */
-		if (temp->PID >= temp->i) {
-		    net_loss = temp->ND + (temp->PID - temp->i);
-		}
-		else net_loss = 0;
-		printk(KERN_INFO "net_loss %u\n", net_loss);
-
-		if (temp->NR < 5) {
-		    loss_rate = beta * temp->LR / 100;
-		} else if (temp->NR > 0){
-		    loss_rate = net_loss * 100 / temp->NR;
-		    temp->LR = ((100-beta) * loss_rate + beta * temp->LR) / 100;
-		}
-		printk(KERN_INFO "updated LLR %u\n", temp->LR);
-
-		/*
-		 * Rate allocation: NaturalShare & PerSenderFairShare
-		 */
-		temp->WR = naturalShare(temp, net_loss);
-		//temp->WR = perSenderFairShare(); // perSenderFairShare
-		printk(KERN_INFO "updated allowed window %u\n", temp->WR);
-
-		/*
-		 * Reset for the next period
-		 */
-		temp->TA = jiffies;
-		temp->PID = 0;
-		temp->NR = 0;
-		temp->ND = 0;
-		memset(temp->WV, 0, 128);
-		temp->i = 0;
-	    } 
-	
-	    // Capability Handling
-	    if(jiffies <= (temp->TA + detection_period - Th_rtt) && temp->PID < Th_cap){
-		//If data_len is not 0, need sk_buff linerize.  zero is returned and the old skb data released.	
-		skb_linearize(skb); 		
-		printk(KERN_INFO "INSERT====>Before:Insert %u capability len:%0x data_len:%u tailroom:%u head:%0x data:%0x tail:%0x end:%0x iplen:%x\n", temp->PID, skb->len, skb->data_len, skb->end-skb->tail, skb->head,skb->data, skb->tail, skb->end, ntohs(iph->tot_len));
-		
-		if((skb->end - skb->tail) < capability_len) {
-		    spin_unlock_irq(&mylock);	    
-		    return NF_ACCEPT;
-		}
-		
-		(temp->PID)++;
-
-		
-		//For simplicity of debugging, we simulate the capabilty computation by calling the CBC function
-		cap->id = temp->PID;
-		cap->saddr = iph->saddr;
-		cap->timestamp = jiffies;
-		test_encrypt_cbc();
-
-		memcpy(cap->code, encryption_code, 36);
-
-		// Append capability at the footer of the skb
-		secure = skb_put(skb, capability_len);
-		memcpy(secure, (char *)cap, capability_len);
-		tcph->res1 = 0xf;
-
-		// cTable Handling
-		count = insertcTable(ctab, cap->saddr, cap->id, cap->timestamp, cap->code);
-		if(count == 1) beginToTime(ctab);
-
-
-		// Recompute checksum to ensure correctiveness
-		iph->tot_len = iph->tot_len + htons(capability_len);
+    if (Add_Trim_Capability && iph->daddr == victim_networkip && iph->protocol == IPPROTO_TCP) 
+	{
+		tcph = (struct tcphdr *)((__u32 *)iph+ iph->ihl);
 		tcplen = skb->len - ip_hdrlen(skb);
 
-		tcph->check = 0; 
-		tcph->check = tcp_v4_check(tcplen, iph->saddr, iph->daddr, csum_partial(tcph, tcplen, 0));
-		skb->ip_summed = CHECKSUM_NONE;
-		ip_send_check(iph);
+		// irrelevent packets
+		if (ntohs(tcph->dest) != 9877 || tcph->fin) return NF_ACCEPT;
 
-	    }
 
-	    /*
-	     * UDP encapsulation
-	     */
+		// Handle inner TCP packets
+		spin_lock_irq(&mylock);
 
-	    if (IP_in_UDP_ENCAP) {
+		if(load_cTable == 0){
+			initialcTable(ctab);
+			load_cTable = 1;
+		}
 
-		// remember old packet information
-		source_ip = iph->saddr;
-		dest_ip = iph->daddr;
-		original_ip_len = ntohs(iph->tot_len);
-		tot_payload_len = ntohs(iph->tot_len) - iph->ihl*4 - tcph->doff*4;
+		temp = searchiTable(iph->saddr);
 
-		//printk(KERN_INFO "Packet length at POST_ROUTING: %u\n", ntohs(iph->tot_len));
+		// insert iTable entry
+		if (temp == NULL){
+			if ((temp = kmalloc(sizeof(struct iTable), GFP_KERNEL)) != NULL){
+				printk(KERN_INFO "kmalloc and create one new iTable for one new client\n");
+				temp->f = iph->saddr;
+				temp->TA = jiffies;
+				temp->PID = 0;
+				temp->NR = 0;
+				temp->ND = 0;
+				temp->WR = 0;				
+				memset(temp->WV, 0, 128);
+				temp->LR = 0;				
+				temp->next = NULL;
+			}else{
+				printk(KERN_INFO "create new iTable fail\n");		
+				return NF_ACCEPT;
+			}
+
+			if (iTable_header == NULL){
+				iTable_header = temp;
+				iTable_tail = temp;
+			}else{
+				iTable_tail->next = temp;
+				iTable_tail = temp;
+			}
+		}
+
+		// reset the flow entry if the flow entry is outdated
+		if ((jiffies - temp->TA) > 10 * detection_period) 
+		{
+			printk (KERN_INFO "RETSET for the sender\n");
+
+			temp->TA = jiffies;
+			temp->PID = 0;
+			temp->NR = 0;
+			temp->ND = 0;
+			temp->WR = 0;				
+			memset(temp->WV, 0, 128);
+			temp->i = 0;
+			temp->LR = 0;				
+		}
+
+		// Count the current packet
+		(temp->NR)++;
 
 		/*
-		 * insert new header for authenticator 
-		 * 1. Insert UDP header first 
-		 * 2. Then insert IP header 
-		 */
-		// headroom check
-		if ((skb_headroom(skb) < (sizeof(struct iphdr) + sizeof(struct udphdr)))) {
-		    printk(KERN_INFO "headroom is not enough for iphdr and udphdr");
-		    if (pskb_expand_head(skb, (sizeof(struct iphdr) + sizeof(struct udphdr)), 0, GFP_ATOMIC) != 0) { 
-			printk(KERN_INFO "headeroom is not enough");
-			return NF_DROP;
-		    } 
+		* Best effort handling
+		*/
+		if (temp->NR > temp->WR) 
+		{
+			if ((temp->LR > LLR_thres) || (SLR_loss_rate > SLR_thres)) {
+				printk(KERN_INFO "Best effort rate limiting\n");
+				printk(KERN_INFO "SLR loss rate %u\n", SLR_loss_rate);
+				temp->ND += 1;
+				return NF_DROP;
+			}
+		}
+	
+		/*
+		* New detection period: Compute iTable entries
+		*/
+		if ((jiffies - temp->TA) > detection_period) 
+		{ 
+			printk(KERN_INFO "New period for sender %u\n", temp->f);
+			printk(KERN_INFO "PID %u\n", temp->PID);
+			printk(KERN_INFO "received capability %u\n", temp->i);
+			printk(KERN_INFO "early drop %u\n", temp->ND);
+			printk(KERN_INFO "receive window %u\n", temp->NR);
+			printk(KERN_INFO "allowed window %u\n", temp->WR);
+			printk(KERN_INFO "loss rate %u\n", temp->LR);
+		
+			// update iTable items
+			/*
+			* For experimental purpose, the prototype simply computes the net_loss as the 
+			* number of lost capabilities
+			*/
+			if (temp->PID >= temp->i) {
+				net_loss = temp->ND + (temp->PID - temp->i);
+			}
+			else net_loss = 0;
+		
+			printk(KERN_INFO "net_loss %u\n", net_loss);
+
+			if (temp->NR < 5) {
+				loss_rate = beta * temp->LR / 100;
+			} else if (temp->NR > 0){
+				loss_rate = net_loss * 100 / temp->NR;
+				temp->LR = ((100-beta) * loss_rate + beta * temp->LR) / 100;
+			}
+			printk(KERN_INFO "updated LLR %u\n", temp->LR);
+
+			/*
+			* Rate allocation: NaturalShare & PerSenderFairShare
+			*/
+			temp->WR = naturalShare(temp, net_loss);
+			//temp->WR = perSenderFairShare(); // perSenderFairShare
+			printk(KERN_INFO "updated allowed window %u\n", temp->WR);
+
+			/*
+			* Reset for the next period
+			*/
+			temp->TA = jiffies;
+			temp->PID = 0;
+			temp->NR = 0;
+			temp->ND = 0;
+			memset(temp->WV, 0, 128);
+			temp->i = 0;
 		} 
 		
-		/*
-		if ((skb_headroom(skb) < (sizeof(struct iphdr) + sizeof(struct udphdr)))) {
-		    printk(KERN_INFO "headeroom is not enough");
-		    return NF_DROP;
+		// Capability Handling
+		if(jiffies <= (temp->TA + detection_period - Th_rtt) && temp->PID < Th_cap)
+		{
+			//If data_len is not 0, need sk_buff linerize.  zero is returned and the old skb data released.	
+			skb_linearize(skb); 		
+			printk(KERN_INFO "INSERT====>Before:Insert %u capability len:%0x data_len:%u tailroom:%u head:%0x data:%0x tail:%0x end:%0x iplen:%x\n", temp->PID, skb->len, skb->data_len, skb->end-skb->tail, skb->head,skb->data, skb->tail, skb->end, ntohs(iph->tot_len));
+			
+			if((skb->end - skb->tail) < capability_len) {
+				spin_unlock_irq(&mylock);	    
+				return NF_ACCEPT;
+			}
+			
+			(temp->PID)++;
+
+			
+			//For simplicity of debugging, we simulate the capabilty computation by calling the CBC function
+			cap->id = temp->PID;
+			cap->saddr = iph->saddr;
+			cap->timestamp = jiffies;
+			test_encrypt_cbc();
+
+			memcpy(cap->code, encryption_code, 36);
+
+			// Append capability at the footer of the skb
+			secure = skb_put(skb, capability_len);
+			memcpy(secure, (char *)cap, capability_len);
+			tcph->res1 = 0xf;
+
+			// cTable Handling
+			count = insertcTable(ctab, cap->saddr, cap->id, cap->timestamp, cap->code);
+			if(count == 1) beginToTime(ctab);
+
+			// Recompute checksum to ensure correctiveness
+			iph->tot_len = iph->tot_len + htons(capability_len);
+			tcplen = skb->len - ip_hdrlen(skb);
+
+			tcph->check = 0; 
+			tcph->check = tcp_v4_check(tcplen, iph->saddr, iph->daddr, csum_partial(tcph, tcplen, 0));
+			skb->ip_summed = CHECKSUM_NONE;
+			ip_send_check(iph);
 		}
+
+		/*
+		* UDP encapsulation
 		*/
+		if (IP_in_UDP_ENCAP) 
+		{
 
-		/*UDP header*/
-		udph = (struct udphdr*) skb_push(skb, sizeof(struct udphdr));
-		udph->source = htons(30000);
-		udph->dest = htons(30000);
-		udph->len = htons(tot_payload_len); // for payload size
-		udph->check = 0; // UDP checksum calculation: VXLAN's UDP checksum is 0
+			// remember old packet information
+			source_ip = iph->saddr;
+			dest_ip = iph->daddr;
+			original_ip_len = ntohs(iph->tot_len);
+			tot_payload_len = ntohs(iph->tot_len) - iph->ihl*4 - tcph->doff*4;
 
-		/*IP header*/
-		iph = (struct iphdr*) skb_push(skb, sizeof(struct iphdr));
-		iph->protocol = IPPROTO_UDP;
-		iph->ihl = 5;
-		iph->version = 4;
-		iph->tos = 0;
-		iph->tot_len = htons(sizeof(struct iphdr) + original_ip_len + sizeof(struct udphdr));
-		iph->id = 0;
-		iph->frag_off = 0;
-		iph->ttl = 60;
+			//printk(KERN_INFO "Packet length at POST_ROUTING: %u\n", ntohs(iph->tot_len));
 
-		// addresses
-		iph->saddr = source_ip;
-		iph->daddr = dest_ip;
+			/*
+			* insert new header for authenticator 
+			* 1. Insert UDP header first 
+			* 2. Then insert IP header 
+			*/
+			// headroom check
+			if ((skb_headroom(skb) < (sizeof(struct iphdr) + sizeof(struct udphdr)))) {
+				printk(KERN_INFO "headroom is not enough for iphdr and udphdr");
+				if (pskb_expand_head(skb, (sizeof(struct iphdr) + sizeof(struct udphdr)), 0, GFP_ATOMIC) != 0) { 
+				printk(KERN_INFO "headeroom is not enough");
+				return NF_DROP;
+				} 
+			} 
+			
+			/*
+			if ((skb_headroom(skb) < (sizeof(struct iphdr) + sizeof(struct udphdr)))) {
+				printk(KERN_INFO "headeroom is not enough");
+				return NF_DROP;
+			}
+			*/
 
-		// compute the checksum
-		skb->ip_summed = CHECKSUM_NONE;
-		ip_send_check(iph);
-	    }
+			/*UDP header*/
+			udph = (struct udphdr*) skb_push(skb, sizeof(struct udphdr));
+			udph->source = htons(30000);
+			udph->dest = htons(30000);
+			udph->len = htons(tot_payload_len); // for payload size
+			udph->check = 0; // UDP checksum calculation: VXLAN's UDP checksum is 0
 
-	    spin_unlock_irq(&mylock);		
-	}
+			/*IP header*/
+			iph = (struct iphdr*) skb_push(skb, sizeof(struct iphdr));
+			iph->protocol = IPPROTO_UDP;
+			iph->ihl = 5;
+			iph->version = 4;
+			iph->tos = 0;
+			iph->tot_len = htons(sizeof(struct iphdr) + original_ip_len + sizeof(struct udphdr));
+			iph->id = 0;
+			iph->frag_off = 0;
+			iph->ttl = 60;
 
+			// addresses
+			iph->saddr = source_ip;
+			iph->daddr = dest_ip;
+
+			// compute the checksum
+			skb->ip_summed = CHECKSUM_NONE;
+			ip_send_check(iph);
+		}
+
+		spin_unlock_irq(&mylock);		
     }
 
     /* 
      * Redirect all packets targetting the sources (from victim)
      *	1. Change the saddr as if the packet is from the mbox (which is what the source expects)
      */ 
-    else if (redirect_enabled && iph->saddr == victim_networkip && iph->protocol == IPPROTO_TCP) {
-	tcph = (struct tcphdr *)((__u32 *)iph + iph->ihl);
-	
-	if (ntohs(tcph->source) == 9877 && tcph->ack) {
-	    spin_lock_irq(&mylock);
-	    iph->saddr = mbox_networkip;
+    else if (redirect_enabled && iph->saddr == victim_networkip && iph->protocol == IPPROTO_TCP) 
+	{
+		tcph = (struct tcphdr *)((__u32 *)iph + iph->ihl);
+		if (ntohs(tcph->source) == 9877 && tcph->ack) 
+		{
+			spin_lock_irq(&mylock);
+			iph->saddr = mbox_networkip;
 
-	    // recompute checksum
-	    tcplen = skb->len - ip_hdrlen(skb);
-	    tcph->check = 0; 
-	    tcph->check = tcp_v4_check(tcplen, iph->saddr, iph->daddr, csum_partial(tcph, tcplen, 0));
-	    skb->ip_summed = CHECKSUM_NONE;
-	    ip_send_check(iph);
-	    spin_unlock_irq(&mylock);
-	}
-
+			// recompute checksum
+			tcplen = skb->len - ip_hdrlen(skb);
+			tcph->check = 0; 
+			tcph->check = tcp_v4_check(tcplen, iph->saddr, iph->daddr, csum_partial(tcph, tcplen, 0));
+			skb->ip_summed = CHECKSUM_NONE;
+			ip_send_check(iph);
+			spin_unlock_irq(&mylock);
+		}
     }
 
     //	printk(KERN_INFO "%lu\n", jiffies);
